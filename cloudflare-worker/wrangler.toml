@@ -1,0 +1,6 @@
+name = "chimera-worker"
+main = "index.ts"
+compatibility_date = "2024-09-01"
+
+[vars]
+ORIGIN = "https://your-chimera-app.vercel.app"
