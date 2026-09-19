@@ -21,21 +21,70 @@ Request → Edge Middleware → bot-detection heuristics
                      human ───────┼─────── bot
                        │                     │
                  real page               /api/bizarro
-                                   (fabricated + watermarked)
+              (app/page.tsx etc.)   (fabricated + watermarked)
+                       │                     │
+                       └────────┬────────────┘
+                                ▼
+                    logged to /api/log or Upstash
+                                │
+                                ▼
+                    /dashboard ← /api/stats
 ```
 
 1. **`lib/bot-detection.ts`** — scores every request using User-Agent identity
    matching against known AI-crawler strings, plus header-shape heuristics
-   (missing `Accept-Language`, absent `Sec-Fetch-*` hints, etc).
+   (missing `Accept-Language`, absent `Sec-Fetch-*` hints, known scraping-library
+   signatures). 13 unit tests in `lib/__tests__/`.
 2. **`middleware.ts`** — routes bot-flagged requests to `/api/bizarro`
-   instead of the real page, and stamps `x-chimera-*` debug headers on every
-   response either way.
+   instead of the real page, stamps `x-chimera-*` debug headers on every
+   response, and logs the classification for the dashboard.
 3. **`lib/fabricate.ts`** — generates the alternate-universe content. Works
    with zero API keys (deterministic date/number/entity transforms) or, if
    `GROQ_API_KEY` is set, asks a fast LLM to rewrite content more naturally.
-4. **`lib/watermark.ts`** — embeds provenance two ways (see [Watermarking](#watermarking-what-it-actually-proves) below).
-5. **`app/api/verify/route.ts`** — paste any suspect text in and check it for
-   both watermark types.
+4. **`lib/watermark.ts`** — embeds provenance two ways (see
+   [Watermarking](#watermarking-what-it-actually-proves) below).
+5. **`app/verify/`** — a UI (not just an API) for pasting in suspect text and
+   checking it against both watermark types.
+6. **`app/dashboard/`** — a live analytics view of every classified request:
+   bot/human split, top identified crawlers, per-path breakdown, and a
+   recent-requests table, backed by `lib/store.ts`.
+
+### Why there's both `/api/log` and `/api/stats`
+
+This tripped me up while building it, so it's worth documenting: Next.js
+Edge Middleware always runs in its own sandboxed isolate — even
+self-hosted, via the `edge-runtime` package — so a plain in-memory array in
+`lib/store.ts` written from `middleware.ts` is **not visible** to a
+Node.js-runtime route that imports the same file, because they're different
+JS execution contexts entirely. `/api/log` is a Node-runtime relay:
+middleware posts hits to it, and it shares real module memory with
+`/api/stats` (also Node runtime) within one running server process. If
+`UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` are set, this whole
+relay is bypassed — middleware and every route write straight to Redis,
+which is the correct architecture for a real multi-instance deployment.
+
+## Pages
+
+| Route | What it is |
+|---|---|
+| `/` | Real landing page — also shows a live split-screen of the real vs. fabricated homepage content, side by side |
+| `/pricing`, `/article` | Rest of the real site |
+| `/dashboard` | Live traffic analytics — bot/human split, top crawlers, recent request log |
+| `/verify` | Paste suspect text, check it against the watermark + canary systems |
+| `/api/bizarro` | Fabricated page renderer (only ever hit via middleware rewrite) |
+| `/api/verify` | JSON API behind `/verify` |
+| `/api/stats` | JSON API behind `/dashboard` |
+| `/api/log` | Internal relay — see above |
+
+## Testing
+
+```bash
+npm test        # Vitest — bot-detection + watermark unit tests
+npx tsc --noEmit # typecheck
+npm run build    # full production build
+```
+
+CI (`.github/workflows/ci.yml`) runs all three on every push/PR to `main`.
 
 ## Quickstart
 
@@ -47,6 +96,7 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) — that's the real site.
+Visit `/dashboard` and `/verify` too.
 
 ### Live demo
 
@@ -82,6 +132,18 @@ npm run dev
 Without a key, Chimera still works — it uses deterministic transforms
 (year-shifting, digit-reversal pricing, entity substitution) instead.
 
+### Optional: persistent dashboard data (Upstash Redis)
+
+```bash
+# add to .env.local:
+UPSTASH_REDIS_REST_URL=...
+UPSTASH_REDIS_REST_TOKEN=...
+```
+
+Free tier at [upstash.com](https://upstash.com). Without it, `/dashboard`
+still works locally (in-memory, resets on restart) — see the architecture
+note above for why that requires the `/api/log` relay.
+
 ## Watermarking: what it actually proves
 
 Being honest about this matters more than it sounds cool, so here's the real
@@ -92,7 +154,8 @@ breakdown of the two mechanisms this project uses:
 | **Zero-width steganography** (`encodeStego`/`decodeStego`) — hidden bits encoded in ZWSP/ZWNJ/ZWJ characters between words | Strong evidence of **verbatim republishing** — e.g. a scraper's cache, an aggregator site, or a search index serving your fabricated page byte-for-byte | Zero-width Unicode is routinely stripped by HTML sanitizers and, critically, by tokenization/data-cleaning pipelines before LLM training. **This is not reliable evidence that a model trained on the text** — treat it as a republishing tripwire, not a training-data proof. |
 | **Canary facts** (`CANARY_FACTS` — distinctive fabricated claims like a fake patent number or a specific "founded by retired lighthouse keepers" origin story) | Circumstantial evidence a model was exposed to the page during training or retrieval, if it later reproduces the specific fabricated detail | A single match isn't proof (models occasionally hallucinate coincidentally-similar specifics); treat matches as leads to investigate, not courtroom evidence. This is the same "trap street" / fictitious dictionary entry technique publishers have used for decades. |
 
-Use `/api/verify` (POST `{"text": "..."}`) to scan any suspect text — e.g.
+Use the `/verify` page, or POST `{"text": "..."}` to `/api/verify` directly,
+to scan any suspect text — e.g.
 paste in an LLM completion that suspiciously mentions your "Quietfire Tier"
 pricing — for both signal types.
 
