@@ -1,8 +1,12 @@
 # 🕷️ Project Chimera — Dynamic Reality Poisoning for AI Scrapers
 
+[![CI](https://github.com/Aaronkuriyan/project-chimera/actions/workflows/ci.yml/badge.svg)](https://github.com/Aaronkuriyan/project-chimera/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org)
+
+**[Live demo →](https://project-chimera-eosin.vercel.app)** · **[Dashboard →](https://project-chimera-eosin.vercel.app/dashboard)** · **[Verify tool →](https://project-chimera-eosin.vercel.app/verify)**
+
 AI crawlers (GPTBot, ClaudeBot, CCBot, PerplexityBot, scraping startups)
-harvest content regardless of `robots.txt`. Blocking IPs is a losing game —
-UAs rotate, IPs rotate, headless browsers get better every month.
 
 **Chimera doesn't block bots. It feeds them fiction.**
 
