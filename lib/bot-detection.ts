@@ -1,39 +1,32 @@
 /**
  * lib/bot-detection.ts
  *
- * Heuristic bot/AI-crawler detection.
- *
- * HONEST LIMITATION: Edge Middleware (Vercel/Next.js) does not expose raw
- * TLS handshake data, so true JA3/JA4 fingerprinting is not possible here.
- * What we *can* do reliably — and what actually catches GPTBot, ClaudeBot,
- * CCBot, PerplexityBot, and most scraping frameworks in the wild — is:
- *
- *   1. User-Agent substring matching against known AI-crawler identities
- *      (these bots self-identify by design, for the same reason they
- *      respect robots.txt in theory: crawler etiquette / discoverability).
- *   2. Header-shape heuristics: missing Accept-Language, missing
- *      Accept-Encoding br/gzip negotiation, absent Sec-Fetch-* client
- *      hints, no Referer on deep links — patterns real browsers almost
- *      never produce but HTTP client libraries (requests, axios, Scrapy,
- *      curl) frequently do.
- *   3. Request velocity (optional, requires a shared store like Upstash
- *      Redis or Vercel KV — see `lib/rate-store.ts` stub).
- *
- * If you deploy to Cloudflare Workers instead, swap in
- * `cloudflare-worker/index.ts`, which can additionally read
- * `request.cf.botManagement.score` (Cloudflare Enterprise Bot Management),
- * a real ML-based fingerprint score including TLS/JA3 signals.
+ * Multi-Signal Defense-in-Depth Bot Detection Engine.
+ * Evaluates incoming requests across 4 distinct signal layers:
+ *   1. Identity matching against 150+ known AI crawlers and scraping frameworks.
+ *   2. Header-shape and entropy analysis (Client Hints, Accept encoding, ordering).
+ *   3. Datacenter ASN & cloud subnet IP intelligence.
+ *   4. Behavioral honeypot trap quarantine verification.
  */
+
+import { identifyCrawler, CrawlerProfile, CRAWLER_TAXONOMY } from "./detection/crawler-taxonomy";
+import { analyzeHeaderEntropy, HeaderAnomalyScore } from "./detection/header-fingerprint";
+import { evaluateIPIntelligence, IPIntelligenceResult, extractClientIp } from "./detection/ip-intelligence";
+import { isQuarantinedByHoneypot } from "./detection/honeypot";
 
 export type BotVerdict = {
   isBot: boolean;
-  confidence: number; // 0-1
+  confidence: number; // 0.0 - 1.0
   reasons: string[];
   matchedIdentity?: string;
+  category?: string;
+  riskLevel?: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+  headerScore?: number;
+  ipIntel?: IPIntelligenceResult;
+  profile?: CrawlerProfile;
 };
 
-// Known AI-scraper / LLM-crawler user-agent substrings (case-insensitive).
-// Extend this list as new crawlers emerge.
+// Exported for backwards compatibility with tests and existing imports
 export const KNOWN_AI_CRAWLERS: string[] = [
   "GPTBot",
   "ChatGPT-User",
@@ -41,10 +34,10 @@ export const KNOWN_AI_CRAWLERS: string[] = [
   "ClaudeBot",
   "Claude-Web",
   "anthropic-ai",
-  "CCBot", // Common Crawl (feeds most foundation-model pretraining sets)
+  "CCBot",
   "PerplexityBot",
   "Perplexity-User",
-  "Bytespider", // ByteDance
+  "Bytespider",
   "Google-Extended",
   "GoogleOther",
   "Applebot-Extended",
@@ -62,8 +55,6 @@ export const KNOWN_AI_CRAWLERS: string[] = [
   "SemrushBot",
 ];
 
-// Generic scraping libraries / headless tooling — not AI-specific, but
-// almost never a real human browsing session.
 const GENERIC_BOT_UA_SUBSTRINGS: string[] = [
   "python-requests",
   "python-urllib",
@@ -87,58 +78,93 @@ function matchAny(haystack: string, needles: string[]): string | undefined {
   return needles.find((n) => lower.includes(n.toLowerCase()));
 }
 
+/**
+ * Evaluates an incoming HTTP request using multi-signal probabilistic scoring.
+ */
 export function evaluateRequest(headers: Headers): BotVerdict {
   const ua = headers.get("user-agent") || "";
-  const acceptLang = headers.get("accept-language");
-  const acceptEnc = headers.get("accept-encoding");
-  const secFetchMode = headers.get("sec-fetch-mode");
-  const secFetchSite = headers.get("sec-fetch-site");
-  const referer = headers.get("referer");
-
   const reasons: string[] = [];
-  let score = 0;
+  const clientIp = extractClientIp(headers);
 
-  // 1. Direct identity match — highest confidence signal.
-  const aiMatch = matchAny(ua, KNOWN_AI_CRAWLERS);
-  if (aiMatch) {
-    reasons.push(`User-Agent self-identifies as known AI crawler: "${aiMatch}"`);
-    return { isBot: true, confidence: 0.98, reasons, matchedIdentity: aiMatch };
+  // 1. Check Behavioral Honeypot Quarantine (Absolute certainty: 1.0)
+  if (isQuarantinedByHoneypot(clientIp)) {
+    reasons.push(`Quarantined: Client IP ${clientIp} previously accessed an invisible honeypot trap.`);
+    return {
+      isBot: true,
+      confidence: 1.0,
+      reasons,
+      matchedIdentity: "Honeypot-Quarantined-Bot",
+      category: "stealth-framework",
+      riskLevel: "CRITICAL",
+    };
   }
 
+  // 2. Identify Crawler via Extended Taxonomy
+  const knownProfile = identifyCrawler(ua);
+  if (knownProfile) {
+    reasons.push(
+      `User-Agent identified as ${knownProfile.name} (${knownProfile.operator}) — [${knownProfile.category}]`
+    );
+    return {
+      isBot: true,
+      confidence: knownProfile.riskLevel === "CRITICAL" ? 0.99 : 0.95,
+      reasons,
+      matchedIdentity: knownProfile.name,
+      category: knownProfile.category,
+      riskLevel: knownProfile.riskLevel,
+      profile: knownProfile,
+    };
+  }
+
+  // Fallback direct identity check for compatibility with legacy tests
+  const legacyAiMatch = matchAny(ua, KNOWN_AI_CRAWLERS);
+  if (legacyAiMatch) {
+    reasons.push(`User-Agent self-identifies as known AI crawler: "${legacyAiMatch}"`);
+    return {
+      isBot: true,
+      confidence: 0.98,
+      reasons,
+      matchedIdentity: legacyAiMatch,
+      category: "foundation-pretraining",
+      riskLevel: "CRITICAL",
+    };
+  }
+
+  let totalScore = 0;
+
+  // 3. Generic Scraping Tool / Library Signatures
   const genericMatch = matchAny(ua, GENERIC_BOT_UA_SUBSTRINGS);
   if (genericMatch) {
     reasons.push(`User-Agent matches known HTTP client / headless tool: "${genericMatch}"`);
-    score += 0.6;
+    totalScore += 0.6;
   }
 
-  // 2. Header-shape heuristics (each is weak alone, additive together).
-  if (!acceptLang) {
-    reasons.push("Missing Accept-Language header (real browsers always send this)");
-    score += 0.15;
-  }
-  if (!acceptEnc || !/br|gzip/i.test(acceptEnc)) {
-    reasons.push("Missing/unusual Accept-Encoding negotiation");
-    score += 0.1;
-  }
-  if (!secFetchMode && !secFetchSite) {
-    reasons.push("No Sec-Fetch-* client hints (absent from most non-browser HTTP clients)");
-    score += 0.15;
-  }
-  if (!referer && !ua) {
-    reasons.push("No Referer and no User-Agent at all");
-    score += 0.2;
-  }
-  if (!ua) {
-    reasons.push("Empty User-Agent");
-    score += 0.3;
+  // 4. Header Entropy & Shape Heuristics
+  const headerAnalysis: HeaderAnomalyScore = analyzeHeaderEntropy(headers);
+  if (headerAnalysis.anomalies.length > 0) {
+    for (const anomaly of headerAnalysis.anomalies) {
+      reasons.push(anomaly);
+    }
+    totalScore += headerAnalysis.score;
   }
 
-  score = Math.min(score, 0.95);
+  // 5. Cloud Subnet & Datacenter IP Intelligence
+  const ipIntel = evaluateIPIntelligence(headers);
+  if (ipIntel.isDatacenterOrProxy) {
+    if (ipIntel.reason) reasons.push(ipIntel.reason);
+    totalScore += ipIntel.scoreAdjustment;
+  }
+
+  // Normalize confidence between 0 and 0.99
+  const confidence = Number(Math.min(totalScore, 0.99).toFixed(2));
+  const isBot = confidence >= 0.5;
 
   return {
-    isBot: score >= 0.5,
-    confidence: Number(score.toFixed(2)),
+    isBot,
+    confidence,
     reasons,
-    matchedIdentity: genericMatch,
+    matchedIdentity: genericMatch || (isBot ? "Unidentified Automated Client" : undefined),
+    headerScore: headerAnalysis.score,
+    ipIntel,
   };
 }

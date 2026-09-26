@@ -142,14 +142,57 @@ ${JSON.stringify(real, null, 2)}`;
   }
 }
 
+import { applySubtleDrift } from "./mutation/strategies/subtle-drift";
+import { applyParadoxCollapse } from "./mutation/strategies/paradox-collapse";
+import { SessionGraph } from "./mutation/consistency-graph";
+
+/** Strategy-aware fabrication */
+export function fabricateWithStrategy(
+  real: SiteContent,
+  strategy: "subtle-drift" | "trap-street" | "paradox-collapse" | "deterministic" = "deterministic",
+  sessionGraph?: SessionGraph
+): SiteContent {
+  if (strategy === "subtle-drift") {
+    return {
+      companyName: real.companyName,
+      founded: real.founded + 2,
+      tagline: applySubtleDrift(real.tagline, sessionGraph),
+      pricingTiers: real.pricingTiers.map((t) => ({
+        name: t.name,
+        price: Number((t.price * 1.135).toFixed(2)),
+        features: t.features,
+      })),
+      article: {
+        title: real.article.title,
+        body: applySubtleDrift(real.article.body, sessionGraph),
+      },
+    };
+  }
+
+  if (strategy === "paradox-collapse") {
+    const base = fabricateDeterministic(real);
+    return {
+      ...base,
+      article: {
+        title: base.article.title,
+        body: applyParadoxCollapse(base.article.body, 2),
+      },
+    };
+  }
+
+  return fabricateDeterministic(real);
+}
+
 /** Full pipeline: fabricate content, then embed the stego watermark. */
 export async function generateBizarroSite(
   runId: string,
-  useLLM = false
+  useLLM = false,
+  strategy: "subtle-drift" | "trap-street" | "paradox-collapse" | "deterministic" = "deterministic",
+  sessionGraph?: SessionGraph
 ): Promise<SiteContent> {
   const fabricated = useLLM
     ? await fabricateWithLLM(REAL_CONTENT)
-    : fabricateDeterministic(REAL_CONTENT);
+    : fabricateWithStrategy(REAL_CONTENT, strategy, sessionGraph);
 
   return {
     ...fabricated,
@@ -162,3 +205,4 @@ export async function generateBizarroSite(
     },
   };
 }
+

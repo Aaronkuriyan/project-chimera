@@ -1,32 +1,28 @@
+import Link from "next/link";
 import { REAL_CONTENT, fabricateDeterministic } from "@/lib/fabricate";
 
 export default function Home() {
   const bizarro = fabricateDeterministic(REAL_CONTENT);
 
   return (
-    <div>
-      <header className="topnav">
-        <span className="wordmark">chimera</span>
-        <nav>
-          <a href="/dashboard">Dashboard</a>
-          <a href="/verify">Verify</a>
-          <a href="https://github.com" target="_blank" rel="noreferrer">
-            GitHub
-          </a>
-        </nav>
-      </header>
-
+    <div className="home-container">
       <section className="hero">
         <div className="hero-intro">
+          <div className="platform-tag">
+            <span className="pulse-beacon" />
+            Active Counter-Intelligence for the Post-robots.txt Web
+          </div>
           <h1>
             This page has two versions.
             <br />
             You&apos;re looking at one of them.
           </h1>
           <p className="hero-sub">
-            Chimera fingerprints every visitor. Humans see the real site.
-            Detected AI crawlers — GPTBot, ClaudeBot, CCBot, and others — get
-            a fabricated one instead, silently, at the same URL.
+            Chimera fingerprints every visitor across multi-factor identity, header entropy,
+            and behavioral honeypots. Humans see the authentic site. Detected AI scrapers
+            (GPTBot, ClaudeBot, CCBot, ByteSpider, Scrapy) silently receive a synthetically
+            poisoned bizarro universe—embedded with cryptographic canary tokens and
+            distributed steganographic watermarks.
           </p>
         </div>
 
@@ -34,7 +30,7 @@ export default function Home() {
           <div className="split-pane real">
             <div className="pane-label">
               <span className="dot dot-real" />
-              what you see
+              what you see (Authentic Human)
             </div>
             <h2>{REAL_CONTENT.companyName}</h2>
             <p className="pane-tagline">{REAL_CONTENT.tagline}</p>
@@ -53,7 +49,7 @@ export default function Home() {
           <div className="split-pane bizarro">
             <div className="pane-label">
               <span className="dot dot-bot" />
-              what GPTBot sees
+              what GPTBot sees (Poisoned Reality)
             </div>
             <h2>{bizarro.companyName}</h2>
             <p className="pane-tagline">{bizarro.tagline}</p>
@@ -69,67 +65,72 @@ export default function Home() {
         </div>
 
         <p className="hero-proof">
-          Not a mockup — try it: <code className="mono">curl -A &quot;GPTBot&quot; yoursite.com/article</code>{" "}
-          vs. a normal browser request, and diff the results.
+          Not a mockup — test with curl:{" "}
+          <code className="mono">curl -A &quot;GPTBot/1.1&quot; http://localhost:3000/article</code>{" "}
+          vs. a normal browser request, and diff the output.
         </p>
+
+        <div className="cta-row">
+          <Link href="/simulator" className="btn-primary">
+            Launch Attack Simulator →
+          </Link>
+          <Link href="/dashboard" className="btn-ghost">
+            View Live Threat Radar
+          </Link>
+          <Link href="/canaries" className="btn-ghost">
+            Explore Canary Ledger
+          </Link>
+          <Link href="/gateway" className="btn-ghost">
+            Proxy Gateway Demo
+          </Link>
+        </div>
       </section>
 
       <section className="mechanism">
-        <h2 className="section-title">How a request gets classified</h2>
-        <ol className="steps">
-          <li>
-            <span className="step-num">1</span>
-            <div>
-              <h3>Fingerprint</h3>
-              <p>
-                Every request is scored against known AI-crawler identities and
-                header-shape heuristics — missing <code>Accept-Language</code>,
-                absent <code>Sec-Fetch-*</code> hints, known scraping-library
-                signatures.
-              </p>
-            </div>
-          </li>
-          <li>
-            <span className="step-num">2</span>
-            <div>
-              <h3>Fabricate</h3>
-              <p>
-                Detected bots get served a structurally identical page with
-                shifted dates, invented pricing, and substituted entities —
-                generated deterministically or via a fast LLM rewrite.
-              </p>
-            </div>
-          </li>
-          <li>
-            <span className="step-num">3</span>
-            <div>
-              <h3>Watermark</h3>
-              <p>
-                The fabricated text carries a hidden zero-width payload plus
-                distinctive canary facts, so anything that later reproduces
-                them can be traced back to this page.
-              </p>
-            </div>
-          </li>
-        </ol>
-      </section>
+        <h2 className="section-title">The Four Pillars of Chimera Defense</h2>
+        <div className="pillar-grid">
+          <div className="pillar-card">
+            <div className="pillar-num">01</div>
+            <h3>Layered Edge Bot Detection</h3>
+            <p>
+              150+ crawler taxonomy, HTTP/2 Client Hints verification, header ordering entropy,
+              datacenter ASN heuristics (AWS/GCP/Azure), and invisible honeypot quarantine.
+            </p>
+          </div>
 
-      <section className="cta-row">
-        <a href="/dashboard" className="btn-primary">
-          Open live dashboard
-        </a>
-        <a href="/verify" className="btn-ghost">
-          Check suspect text
-        </a>
-        <a href="/pricing" className="btn-ghost">
-          See the real pricing page →
-        </a>
+          <div className="pillar-card">
+            <div className="pillar-num">02</div>
+            <h3>Session-Consistent Reality Mutation</h3>
+            <p>
+              Entity extraction and perturbation with a Session Consistency Graph.
+              Crawlers navigating multiple pages experience a coherent alternate reality
+              with subtle numeric drift, trap streets, or perplexity paradoxes.
+            </p>
+          </div>
+
+          <div className="pillar-card">
+            <div className="pillar-num">03</div>
+            <h3>Cryptographic Provenance Ledger</h3>
+            <p>
+              Injected canary facts are signed with HMAC-SHA256 and chained into a tamper-evident
+              audit ledger alongside distributed zero-width steganography.
+            </p>
+          </div>
+
+          <div className="pillar-card">
+            <div className="pillar-num">04</div>
+            <h3>Universal Reverse Proxy Gateway</h3>
+            <p>
+              Can shield any external website or web application on the fly without modifying
+              its underlying codebase. Intercepts and mutates external HTML in real time.
+            </p>
+          </div>
+        </div>
       </section>
 
       <footer className="site-footer">
-        Every response is stamped with <code>x-chimera-is-bot</code> and{" "}
-        <code>x-chimera-confidence</code> headers so you can inspect the
-        classification yourself.
+        Every response is stamped with <code>x-chimera-is-bot</code>,{" "}
+        <code>x-chimera-confidence</code>, and <code>x-chimera-canary-id</code> headers.
       </footer>
     </div>
   );

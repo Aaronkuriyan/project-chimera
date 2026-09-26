@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
+    "benchmark": "vitest run benchmarks/__tests__/benchmark.test.ts",
     "demo": "bash scripts/demo.sh"
   },
   "dependencies": {

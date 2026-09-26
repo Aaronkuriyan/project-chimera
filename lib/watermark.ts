@@ -97,6 +97,21 @@ export function encodeStego(text: string, payload: WatermarkPayload): string {
   return words.join(" ");
 }
 
+/**
+ * Distributed multi-point steganography: embeds the payload across multiple
+ * paragraphs to survive partial text slicing and block deletion.
+ */
+export function encodeStegoDistributed(text: string, payload: WatermarkPayload): string {
+  const paragraphs = text.split("\n\n");
+  if (paragraphs.length <= 1) {
+    return encodeStego(text, payload);
+  }
+  // Embed in first paragraph and last paragraph for resilience
+  paragraphs[0] = encodeStego(paragraphs[0], payload);
+  paragraphs[paragraphs.length - 1] = encodeStego(paragraphs[paragraphs.length - 1], payload);
+  return paragraphs.join("\n\n");
+}
+
 /** Scans arbitrary text for an embedded zero-width payload, if present. */
 export function decodeStego(text: string): WatermarkPayload | null {
   const zwChars = Array.from(text).filter((c) =>
@@ -104,10 +119,16 @@ export function decodeStego(text: string): WatermarkPayload | null {
   );
   if (zwChars.length === 0) return null;
   const joined = zwChars.join("");
-  const start = joined.indexOf(ZW.SENTINEL);
-  const end = joined.lastIndexOf(ZW.SENTINEL);
-  if (start === -1 || end === -1 || end <= start) return null;
-  return decodePayload(joined.slice(start + 1, end));
+
+  // Scan across sentinel-delimited blocks to support distributed embeds
+  const blocks = joined.split(ZW.SENTINEL);
+  for (const block of blocks) {
+    if (!block) continue;
+    const decoded = decodePayload(block);
+    if (decoded) return decoded;
+  }
+
+  return null;
 }
 
 /**

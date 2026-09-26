@@ -1,9 +1,10 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import Navbar from "@/components/Navbar";
 
 export const metadata: Metadata = {
-  title: "Chimera Labs",
-  description: "We build tools that make AI scraping economically irrational.",
+  title: "Project Chimera — Active Reality Poisoning for AI Scrapers",
+  description: "Dynamic deception, cryptographic canary token provenance, and reality poisoning for the post-robots.txt web.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -17,7 +18,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <Navbar />
+        <main>{children}</main>
+      </body>
     </html>
   );
 }

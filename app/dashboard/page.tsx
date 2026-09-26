@@ -62,20 +62,19 @@ export default function Dashboard() {
     <div className="dash-wrap">
       <div className="dash-header">
         <div>
-          <a href="/" className="back-link">
-            ← Chimera
-          </a>
-          <h1>Traffic dashboard</h1>
+          <h1>Real-Time Threat Radar &amp; Traffic Analytics</h1>
           <p className="dash-sub">
-            Live classification of every request hitting <code>/</code>,{" "}
-            <code>/pricing</code>, and <code>/article</code>.
+            Live telemetry of every request inspected by the Chimera Edge Inspector across identity,
+            header entropy, and honeypot behavioral analysis.
           </p>
         </div>
-        {stats && (
-          <span className={`store-badge ${stats.persistent ? "persistent" : "memory"}`}>
-            {stats.persistent ? "Persisted via Upstash Redis" : "In-memory (local/demo mode)"}
-          </span>
-        )}
+        <div className="header-actions">
+          {stats && (
+            <span className={`store-badge ${stats.persistent ? "persistent" : "memory"}`}>
+              {stats.persistent ? "Persisted via Upstash Redis" : "In-memory (Active Session)"}
+            </span>
+          )}
+        </div>
       </div>
 
       {error && <div className="dash-error">Couldn't load stats: {error}</div>}
